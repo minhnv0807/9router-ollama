@@ -123,8 +123,15 @@ function normalizeMessages(messages) {
     const content = normalizeContent(msg.content);
     const images = extractImagesFromContent(msg.content);
 
-    // Skip empty messages (except assistant)
-    if (!content && role !== "assistant") continue;
+    // Passthrough Ollama-native images at message level (e.g. from ollama-ai-provider clients)
+    if (Array.isArray(msg.images)) {
+      for (const img of msg.images) {
+        if (typeof img === "string" && img) images.push(img);
+      }
+    }
+
+    // Skip empty messages (except assistant), but keep image-only messages
+    if (!content && images.length === 0 && role !== "assistant") continue;
 
     const out = {
       role: role,
