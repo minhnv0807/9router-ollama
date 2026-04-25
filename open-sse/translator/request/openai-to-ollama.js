@@ -170,26 +170,51 @@ function normalizeContent(content) {
 }
 
 /**
- * Extract base64 images from OpenAI multimodal content blocks.
- * OpenAI image block format:
- *   { type: "image_url", image_url: { url: "data:image/png;base64,..." } }
+ * Extract base64 images from multimodal content blocks.
  * Ollama expects raw base64 strings in message.images[].
+ *
+ * Supported block shapes (covers OpenAI, AI SDK, Anthropic-in-OpenAI hybrids):
+ *   { type: "image_url", image_url: { url: "data:..." } }
+ *   { type: "image_url", image_url: "data:..." }
+ *   { type: "image",     image_url: { url: "data:..." } }
+ *   { type: "image",     image: "data:..." | "<base64>" }
+ *   { type: "image",     source: { type: "base64", media_type, data } }
+ *   { type: "input_image", image_url: "data:..." }   // OpenAI Responses API
  */
 function extractImagesFromContent(content) {
   if (!Array.isArray(content)) return [];
 
   const images = [];
 
+  const pushFromUrlOrBase64 = (raw) => {
+    if (typeof raw !== "string" || !raw) return;
+    const m = raw.match(/^data:[^;]+;base64,([\s\S]+)$/);
+    if (m) images.push(m[1]);
+  };
+
   for (const block of content) {
-    if (!block || block.type !== "image_url") continue;
+    if (!block) continue;
+    const t = block.type;
+    if (t !== "image_url" && t !== "image" && t !== "input_image") continue;
 
-    const url = typeof block.image_url === "string" ? block.image_url : block.image_url?.url;
-    if (typeof url !== "string" || !url) continue;
+    // image_url shape: object with url, or plain string
+    if (block.image_url) {
+      const url = typeof block.image_url === "string" ? block.image_url : block.image_url?.url;
+      pushFromUrlOrBase64(url);
+      continue;
+    }
 
-    const m = url.match(/^data:[^;]+;base64,([\s\S]+)$/);
-    if (!m) continue;
+    // AI SDK style: { type: "image", image: <data> }
+    if (typeof block.image === "string") {
+      pushFromUrlOrBase64(block.image);
+      continue;
+    }
 
-    images.push(m[1]);
+    // Anthropic-style source embedded in OpenAI body
+    if (block.source && block.source.type === "base64" && typeof block.source.data === "string") {
+      images.push(block.source.data);
+      continue;
+    }
   }
 
   return images;
