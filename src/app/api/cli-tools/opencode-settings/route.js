@@ -126,9 +126,11 @@ export async function POST(request) {
     existingProvider.models = existingProvider.models || {};
 
     // Add or update entries for all requested models
+    // attachment: true enables image/file input — without it, AI SDK strips images at the client
+    // and replaces them with an "image input not supported" error text block.
     for (const m of modelsArray) {
       if (!m || typeof m !== "string") continue;
-      existingProvider.models[m] = { name: m };
+      existingProvider.models[m] = { name: m, attachment: true, tool_call: true };
     }
 
     // Save merged provider back
